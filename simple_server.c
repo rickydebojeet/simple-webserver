@@ -38,28 +38,31 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    listen(sockfd, 5);
-    clilen = sizeof(cli_addr);
-
-    newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
-    if (newsockfd < 0)
+    while (1)
     {
-        fprintf(stderr, "ERROR on accept");
-        exit(1);
-    }
+        listen(sockfd, 5);
+        clilen = sizeof(cli_addr);
 
-    bzero(buffer, 256);
-    if (read(newsockfd, buffer, 255) < 0)
-    {
-        fprintf(stderr, "ERROR reading from socket");
-        exit(1);
-    }
-    printf("Here is the message: %s", buffer);
+        newsockfd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen);
+        if (newsockfd < 0)
+        {
+            fprintf(stderr, "ERROR on accept");
+            exit(1);
+        }
 
-    if (write(newsockfd, "I got your message", 18) < 0)
-    {
-        fprintf(stderr, "ERROR writing to socket");
-        exit(1);
+        bzero(buffer, 256);
+        if (read(newsockfd, buffer, 255) < 0)
+        {
+            fprintf(stderr, "ERROR reading from socket");
+            exit(1);
+        }
+        printf("Here is the message: %s", buffer);
+
+        if (write(newsockfd, buffer, strlen(buffer)) < 0)
+        {
+            fprintf(stderr, "ERROR writing to socket");
+            exit(1);
+        }
     }
 
     return 0;
