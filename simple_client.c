@@ -3,15 +3,25 @@
 #include <unistd.h>
 #include <string.h>
 #include <netdb.h>
+#include <signal.h>
+
+void int_handler(int);
+
+int sockfd;
+struct sigaction act;
 
 int main(int argc, char *argv[])
 {
-    int portno, sockfd;
+    int portno, n;
 
     char buffer[256];
 
     struct hostent *server;
     struct sockaddr_in serv_addr;
+
+    act.sa_handler = int_handler; // set signal handler for parent
+
+    sigaction(SIGINT, &act, 0); // set interrupt signal handler for parent
 
     if (argc < 3)
     {
@@ -50,25 +60,44 @@ int main(int argc, char *argv[])
     }
 
     // Read and write to the socket
-    printf("Please enter the message: ");
-    bzero(buffer, 256);
-    fgets(buffer, 255, stdin);
-
-    if (write(sockfd, buffer, strlen(buffer)) < 0)
+    do
     {
-        fprintf(stderr, "Error writing to socket\n");
-        exit(0);
-    }
+        printf("Please enter the message: ");
+        bzero(buffer, 256);
+        fgets(buffer, 255, stdin);
+        n = write(sockfd, buffer, strlen(buffer));
+        if (n < 0)
+        {
+            fprintf(stderr, "Error writing to socket\n");
+            exit(0);
+        }
 
-    bzero(buffer, 256);
+        bzero(buffer, 256);
+        n = read(sockfd, buffer, 255);
 
-    if (read(sockfd, buffer, 255) < 0)
-    {
-        fprintf(stderr, "Error reading from socket\n");
-        exit(0);
-    }
+        if (n < 0)
+        {
+            fprintf(stderr, "Error reading from socket\n");
+            exit(0);
+        }
+        else if (n == 0)
+        {
+            printf("Server closed connection\n");
+            break;
+        }
 
-    printf("Server Response: %s\n", buffer);
+        printf("Server Response: %s\n", buffer);
+
+    } while (n > 0);
+
+    close(sockfd);
 
     return 0;
+}
+
+void int_handler(int p)
+{
+    printf("\nClosing the connection.\n");
+    close(sockfd);
+    exit(0);
 }
