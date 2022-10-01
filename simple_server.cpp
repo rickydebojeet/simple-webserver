@@ -115,4 +115,6 @@ void *connection_handler(void *args)
         }
     } while (n > 0);
     close(newsockfd);
+
+    return NULL;
 }
