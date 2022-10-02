@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 #define TRUE 1
 using namespace std;
