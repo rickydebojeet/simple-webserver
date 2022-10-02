@@ -104,6 +104,11 @@ HTTP_Response *handle_request(string req)
     return response;
 }
 
+/**
+ * @brief Returns the string representation of the HTTP Response
+ *
+ * @return string
+ */
 string HTTP_Response::get_string()
 {
     /*
