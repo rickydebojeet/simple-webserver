@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
                 pthread_join(thread_id[j], NULL);
             }
         }
-    } while (TRUE);
+    } while (true);
 
     return 0;
 }
@@ -102,7 +102,7 @@ void *connection_handler(void *args)
         }
         else
         {
-            // cout << "Request: " << buffer << endl;
+            cout << "Request: " << buffer << endl;
             request = string(buffer);
             response = handle_request(request);
             char char_array[response.length() + 1];

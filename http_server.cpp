@@ -83,6 +83,7 @@ string handle_request(string req)
         char char_array[filestat.st_size + 1];
         int fd = open(url.c_str(), O_RDONLY);
         read(fd, char_array, filestat.st_size);
+        char_array[filestat.st_size] = '\0';
         response->body = string(char_array);
 
         /*
@@ -98,11 +99,12 @@ string handle_request(string req)
 
         string errorOutput = string("html_files/404.html");
         struct stat filestat;
-        stat(url.c_str(), &filestat);
+        stat(errorOutput.c_str(), &filestat);
         response->content_length = to_string(filestat.st_size);
         char char_array[filestat.st_size + 1];
-        int fd = open(url.c_str(), O_RDONLY);
+        int fd = open(errorOutput.c_str(), O_RDONLY);
         read(fd, char_array, filestat.st_size);
+        char_array[filestat.st_size] = '\0';
         response->body = string(char_array);
     }
 
@@ -124,7 +126,9 @@ string HTTP_Response::get_string()
     string response = "";
     time_t ltime;
     ltime = time(0);
-    this->date = "Date: " + (string)asctime(gmtime(&ltime)) + " GMT";
+    string str_time = asctime(gmtime(&ltime));
+    str_time.erase(remove(str_time.begin(), str_time.end(), '\n'), str_time.cend());
+    this->date = "Date: " + str_time + " GMT";
 
     response += "HTTP/" + this->HTTP_version + " " + this->status_code + " " + this->status_text + "\r\n";
     response += this->date + "\r\n";

@@ -16,8 +16,9 @@
 #include <fcntl.h>
 #include <ctime>
 #include <signal.h>
+#include <algorithm>
+#include <string>
 
-#define TRUE 1
 #define HEADER_MAX 8192
 #define THREAD_MAX 8
 #define PORT 8080
