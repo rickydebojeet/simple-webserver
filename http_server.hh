@@ -47,6 +47,6 @@ struct HTTP_Response
   string get_string(); // Returns the string representation of the HTTP Response
 };
 
-HTTP_Response *handle_request(string request); // Function to handle a request
+string handle_request(string request); // Function to handle a request
 
 #endif

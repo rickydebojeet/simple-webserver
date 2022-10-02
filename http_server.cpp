@@ -49,11 +49,11 @@ HTTP_Request::HTTP_Request(string request)
 
 /**
  * @brief Parses a HTTP request and returns a HTTP_Response structure
- * 
+ *
  * @param req Request string from the client socket
- * @return HTTP_Response* 
+ * @return HTTP_Response*
  */
-HTTP_Response *handle_request(string req)
+string handle_request(string req)
 {
     HTTP_Request *request = new HTTP_Request(req);
 
@@ -101,7 +101,7 @@ HTTP_Response *handle_request(string req)
 
     delete request;
 
-    return response;
+    return response->get_string();
 }
 
 /**

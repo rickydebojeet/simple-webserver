@@ -73,13 +73,12 @@ void *connection_handler(void *args)
 {
     int newsockfd = *((int *)args);
     int n;
-    char buffer[256];
+    string request, response;
 
     // Read and write to the socket
     do
     {
-        bzero(buffer, 256);
-        n = read(newsockfd, buffer, 255);
+        n = read(newsockfd, &request[0], 255);
         if (n < 0)
         {
             fprintf(stderr, "ERROR reading from socket\n");
@@ -91,9 +90,9 @@ void *connection_handler(void *args)
         }
         else
         {
-            printf("Here is the message: %s", buffer);
-
-            n = write(newsockfd, buffer, strlen(buffer));
+            cout << "Request: " << request << endl;
+            response = request;
+            n = write(newsockfd, &response[0], response.length());
             if (n < 0)
             {
                 fprintf(stderr, "ERROR writing to socket\n");
