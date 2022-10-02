@@ -35,9 +35,9 @@ HTTP_Request::HTTP_Request(string request)
 
     this->HTTP_version = "1.0"; // We'll be using 1.0 irrespective of the request
 
-    /*
-     TODO : extract the request method and URL from first_line here
-    */
+    // Extraction of the request method and URL from first_line
+    first_line[0] = this->method;
+    first_line[1] = this->url;
 
     // Supports only GET requests
     if (this->method != "GET")
@@ -70,20 +70,18 @@ string handle_request(string req)
         response->status_text = "OK";
         response->content_type = "text/html";
 
-        string body;
-
+        // If the requested path is a directory, open index.html
         if (S_ISDIR(sb.st_mode))
         {
-            /*
-            In this case, requested path is a directory.
-            TODO : find the index.html file in that directory (modify the url
-            accordingly)
-            */
+            url += "/index.html";
         }
 
-        /*
-        TODO : open the file and read its contents
-        */
+        // Opening the file and reading its contents
+        struct stat filestat;
+        stat(url.c_str(), &filestat);
+        response->content_length = to_string(filestat.st_size);
+        int fd = open(url.c_str(), O_RDONLY);
+        read(fd, &response->body[0], filestat.st_size);
 
         /*
         TODO : set the remaining fields of response appropriately
@@ -93,15 +91,18 @@ string handle_request(string req)
     else
     {
         response->status_code = "404";
-
-        /*
-        TODO : set the remaining fields of response appropriately
-        */
+        response->status_text = "Not Found";
+        response->content_type = "text/html";
+        response->content_length = "0";
+        response->body = "";
     }
 
-    delete request;
+    string response_string = response->get_string();
 
-    return response->get_string();
+    delete request;
+    delete response;
+
+    return response_string;
 }
 
 /**
@@ -111,9 +112,17 @@ string handle_request(string req)
  */
 string HTTP_Response::get_string()
 {
-    /*
-    TODO : implement this function
-    */
+    string response = "";
+    time_t ltime;
+    ltime = time(0);
+    this->date = "Date: " + (string)asctime(gmtime(&ltime)) + " GMT";
 
-    return "";
+    response += "HTTP/" + this->HTTP_version + " " + this->status_code + " " + this->status_text + "\r\n";
+    response += this->date + "\r\n";
+    response += "Content-Type: " + this->content_type + "\r\n";
+    response += "Content-Length: " + this->content_length + "\r\n";
+    response += "\r\n";
+    response += this->body;
+
+    return response;
 }

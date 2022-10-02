@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <ctime>
 
 #define TRUE 1
 using namespace std;
@@ -22,31 +23,32 @@ void *connection_handler(void *args);
 
 struct HTTP_Request
 {
-  string HTTP_version;
+    string HTTP_version;
 
-  string method;
-  string url;
+    string method;
+    string url;
 
-  // TODO : Add more fields if and when needed
+    // TODO : Add more fields if and when needed
 
-  HTTP_Request(string request); // Constructor
+    HTTP_Request(string request); // Constructor
 };
 
 struct HTTP_Response
 {
-  string HTTP_version; // 1.0 for this assignment
+    string HTTP_version; // 1.0 for this assignment
 
-  string status_code; // ex: 200, 404, etc.
-  string status_text; // ex: OK, Not Found, etc.
+    string status_code; // ex: 200, 404, etc.
+    string status_text; // ex: OK, Not Found, etc.
 
-  string content_type;
-  string content_length;
+    string content_type;
+    string content_length;
 
-  string body;
+    string body;
 
-  // TODO : Add more fields if and when needed
+    // TODO : Add more fields if and when needed
+    string date;
 
-  string get_string(); // Returns the string representation of the HTTP Response
+    string get_string(); // Returns the string representation of the HTTP Response
 };
 
 string handle_request(string request); // Function to handle a request
