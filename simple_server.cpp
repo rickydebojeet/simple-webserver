@@ -94,57 +94,62 @@ int main(int argc, char *argv[])
 
 void *connection_handler(void *args)
 {
-    pthread_mutex_lock(&queueMutex);
-    if (client_queue.empty())
+    do
     {
-        pthread_cond_wait(&queueCond, &queueMutex);
-    }
-    int newsockfd = client_queue.front();
-    client_queue.pop();
-    pthread_mutex_unlock(&queueMutex);
-    int n;
-    string request, response;
-    char buffer[HEADER_MAX];
 
-    // Read and write to the socket
-    n = read(newsockfd, buffer, HEADER_MAX - 1);
-    if (n < 0)
-    {
-        fprintf(stderr, "ERROR reading from socket\n");
-        exit(1);
-    }
-    else if (n == 0)
-    {
-        printf("Client closed connection!!\n");
-    }
-    else
-    {
-        /* Look for the end-of-header (eoh) CRLF CRLF substring; if
-           not found, then the header size is too large */
-        char *eoh = strstr(buffer, "\r\n\r\n");
-        if (eoh == NULL)
+        pthread_mutex_lock(&queueMutex);
+        if (client_queue.empty())
         {
-            fprintf(stderr, "Header exceeds 8 KB maximum\n");
+            pthread_cond_wait(&queueCond, &queueMutex);
+        }
+        int newsockfd = client_queue.front();
+        client_queue.pop();
+        pthread_mutex_unlock(&queueMutex);
+        int n;
+        string request, response;
+        char buffer[HEADER_MAX];
+
+        // Read and write to the socket
+        n = read(newsockfd, buffer, HEADER_MAX - 1);
+        if (n < 0)
+        {
+            fprintf(stderr, "ERROR reading from socket\n");
             exit(1);
+        }
+        else if (n == 0)
+        {
+            printf("Client closed connection!!\n");
         }
         else
         {
-            cout << "Request: " << buffer << endl;
-            request = string(buffer);
-            response = handle_request(request);
-            char char_array[response.length() + 1];
-            strcpy(char_array, response.c_str());
-            n = write(newsockfd, char_array, strlen(char_array));
-            // cout << "Response: " << response << endl;
-            if (n < 0)
+            /* Look for the end-of-header (eoh) CRLF CRLF substring; if
+               not found, then the header size is too large */
+            char *eoh = strstr(buffer, "\r\n\r\n");
+            if (eoh == NULL)
             {
-                fprintf(stderr, "ERROR writing to socket\n");
+                fprintf(stderr, "Header exceeds 8 KB maximum\n");
                 exit(1);
             }
+            else
+            {
+                cout << "Request: " << buffer << endl;
+                request = string(buffer);
+                response = handle_request(request);
+                char char_array[response.length() + 1];
+                strcpy(char_array, response.c_str());
+                n = write(newsockfd, char_array, strlen(char_array));
+                // cout << "Response: " << response << endl;
+                if (n < 0)
+                {
+                    fprintf(stderr, "ERROR writing to socket\n");
+                    exit(1);
+                }
+            }
         }
-    }
-    close(newsockfd);
-    cout << "Client disconnected!!" << endl;
+        close(newsockfd);
+        cout << "Client disconnected!!" << endl;
+
+    } while (true);
 
     return NULL;
 }

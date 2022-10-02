@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <string>
 #include <queue>
+#include <atomic>
 
 #define HEADER_MAX 8192
 #define THREAD_MAX 8
