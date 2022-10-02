@@ -93,8 +93,13 @@ string handle_request(string req)
         response->status_code = "404";
         response->status_text = "Not Found";
         response->content_type = "text/html";
-        response->content_length = "0";
-        response->body = "";
+
+        string errorOutput = string("html_files/404.html");
+        struct stat filestat;
+        stat(url.c_str(), &filestat);
+        response->content_length = to_string(filestat.st_size);
+        int fd = open(url.c_str(), O_RDONLY);
+        read(fd, &response->body[0], filestat.st_size);
     }
 
     string response_string = response->get_string();

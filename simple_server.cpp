@@ -76,30 +76,27 @@ void *connection_handler(void *args)
     string request, response;
 
     // Read and write to the socket
-    do
+    n = read(newsockfd, &request[0], 255);
+    if (n < 0)
     {
-        n = read(newsockfd, &request[0], 255);
+        fprintf(stderr, "ERROR reading from socket\n");
+        exit(1);
+    }
+    else if (n == 0)
+    {
+        printf("Client disconnected!!\n");
+    }
+    else
+    {
+        cout << "Request: " << request << endl;
+        response = handle_request(request);
+        n = write(newsockfd, &response[0], response.length());
         if (n < 0)
         {
-            fprintf(stderr, "ERROR reading from socket\n");
+            fprintf(stderr, "ERROR writing to socket\n");
             exit(1);
         }
-        else if (n == 0)
-        {
-            printf("Client disconnected!!\n");
-        }
-        else
-        {
-            cout << "Request: " << request << endl;
-            response = handle_request(request);
-            n = write(newsockfd, &response[0], response.length());
-            if (n < 0)
-            {
-                fprintf(stderr, "ERROR writing to socket\n");
-                exit(1);
-            }
-        }
-    } while (n > 0);
+    }
     close(newsockfd);
 
     return NULL;
