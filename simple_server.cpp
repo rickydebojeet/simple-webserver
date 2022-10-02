@@ -1,13 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <pthread.h>
-
-#define TRUE 1
-
-void *connection_handler(void *args);
+#include "http_server.hh"
 
 int main(int argc, char *argv[])
 {
@@ -40,11 +31,7 @@ int main(int argc, char *argv[])
     serv_addr.sin_port = htons(portno);
 
     // Bind the socket to the address
-    if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    {
-        fprintf(stderr, "ERROR on binding\n");
-        exit(1);
-    }
+    bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
 
     listen(sockfd, 5);
     clilen = sizeof(cli_addr);
