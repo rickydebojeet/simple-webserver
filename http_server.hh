@@ -15,12 +15,17 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <ctime>
+#include <signal.h>
 
 #define TRUE 1
 #define HEADER_MAX 8192
+#define THREAD_MAX 8
+#define PORT 8080
+
 using namespace std;
 
 void *connection_handler(void *args);
+void int_handler(int);
 
 struct HTTP_Request
 {
