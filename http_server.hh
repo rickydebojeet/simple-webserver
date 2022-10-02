@@ -4,10 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <sys/stat.h>
-#include <fstream>
 #include <sstream>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
@@ -18,6 +16,7 @@
 #include <signal.h>
 #include <algorithm>
 #include <string>
+#include <queue>
 
 #define HEADER_MAX 8192
 #define THREAD_MAX 8

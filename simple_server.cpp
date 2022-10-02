@@ -3,9 +3,14 @@
 int sockfd;
 struct sigaction act;
 
+pthread_mutex_t queueMutex;
+pthread_cond_t queueCond;
+
+queue<int> client_queue;
+
 int main(int argc, char *argv[])
 {
-    int newsockfd, thread_data[THREAD_MAX];
+    int newsockfd;
 
     pthread_t thread_id[THREAD_MAX];
 
@@ -15,6 +20,9 @@ int main(int argc, char *argv[])
     act.sa_handler = int_handler; // set signal handler for parent
 
     sigaction(SIGINT, &act, 0); // set interrupt signal handler for parent
+
+    pthread_mutex_init(&queueMutex, NULL);
+    pthread_cond_init(&queueCond, NULL);
 
     // Create a socket
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -39,7 +47,15 @@ int main(int argc, char *argv[])
     cout << "Listening on port " << PORT << endl;
     cout << "To stop the server, press Ctrl+C" << endl;
 
-    int i = 0;
+    // Creating threads
+    for (int i = 0; i < THREAD_MAX; i++)
+    {
+        if (pthread_create(&thread_id[i], NULL, &connection_handler, NULL) != 0)
+        {
+            printf("ERROR: Could not create thread %d", i);
+            exit(EXIT_FAILURE);
+        }
+    }
 
     // Listen for connections continuously
     do
@@ -53,28 +69,39 @@ int main(int argc, char *argv[])
         }
         else
         {
-            thread_data[i] = newsockfd;
+            pthread_mutex_lock(&queueMutex);
             printf("Client connected!!\n");
-            pthread_create(&thread_id[i], NULL, &connection_handler, (void *)&thread_data[i]);
-            i++;
+            client_queue.push(newsockfd);
+            pthread_cond_signal(&queueCond);
+            pthread_mutex_unlock(&queueMutex);
         }
 
-        if (i == THREAD_MAX)
-        {
-            printf("Max clients reached!!\n Waiting for clients to disconnect...\n");
-            for (int j = 0; j < THREAD_MAX; j++, i--)
-            {
-                pthread_join(thread_id[j], NULL);
-            }
-        }
+        // if (i == THREAD_MAX)
+        // {
+        //     printf("Max clients reached!!\n Waiting for clients to disconnect...\n");
+        //     for (int j = 0; j < THREAD_MAX; j++, i--)
+        //     {
+        //         pthread_join(thread_id[j], NULL);
+        //     }
+        // }
     } while (true);
+
+    pthread_mutex_destroy(&queueMutex);
+    pthread_cond_destroy(&queueCond);
 
     return 0;
 }
 
 void *connection_handler(void *args)
 {
-    int newsockfd = *((int *)args);
+    pthread_mutex_lock(&queueMutex);
+    if (client_queue.empty())
+    {
+        pthread_cond_wait(&queueCond, &queueMutex);
+    }
+    int newsockfd = client_queue.front();
+    client_queue.pop();
+    pthread_mutex_unlock(&queueMutex);
     int n;
     string request, response;
     char buffer[HEADER_MAX];
