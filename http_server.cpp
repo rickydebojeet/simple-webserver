@@ -36,8 +36,8 @@ HTTP_Request::HTTP_Request(string request)
     this->HTTP_version = "1.0"; // We'll be using 1.0 irrespective of the request
 
     // Extraction of the request method and URL from first_line
-    first_line[0] = this->method;
-    first_line[1] = this->url;
+    this->method = first_line[0];
+    this->url = first_line[1];
 
     // Supports only GET requests
     if (this->method != "GET")
@@ -80,8 +80,10 @@ string handle_request(string req)
         struct stat filestat;
         stat(url.c_str(), &filestat);
         response->content_length = to_string(filestat.st_size);
+        char char_array[filestat.st_size + 1];
         int fd = open(url.c_str(), O_RDONLY);
-        read(fd, &response->body[0], filestat.st_size);
+        read(fd, char_array, filestat.st_size);
+        response->body = string(char_array);
 
         /*
         TODO : set the remaining fields of response appropriately
@@ -98,8 +100,10 @@ string handle_request(string req)
         struct stat filestat;
         stat(url.c_str(), &filestat);
         response->content_length = to_string(filestat.st_size);
+        char char_array[filestat.st_size + 1];
         int fd = open(url.c_str(), O_RDONLY);
-        read(fd, &response->body[0], filestat.st_size);
+        read(fd, char_array, filestat.st_size);
+        response->body = string(char_array);
     }
 
     string response_string = response->get_string();

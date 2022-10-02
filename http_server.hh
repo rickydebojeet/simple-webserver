@@ -17,6 +17,7 @@
 #include <ctime>
 
 #define TRUE 1
+#define HEADER_MAX 8192
 using namespace std;
 
 void *connection_handler(void *args);
