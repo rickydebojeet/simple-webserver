@@ -6,8 +6,17 @@
 #include <sys/stat.h>
 #include <fstream>
 #include <sstream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <pthread.h>
 
+#define TRUE 1
 using namespace std;
+
+void *connection_handler(void *args);
 
 struct HTTP_Request
 {
@@ -38,6 +47,6 @@ struct HTTP_Response
   string get_string(); // Returns the string representation of the HTTP Response
 };
 
-HTTP_Response *handle_request(string request);
+HTTP_Response *handle_request(string request); // Function to handle a request
 
 #endif
