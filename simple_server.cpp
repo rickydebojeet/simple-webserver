@@ -91,7 +91,7 @@ void *connection_handler(void *args)
         else
         {
             cout << "Request: " << request << endl;
-            response = request;
+            response = handle_request(request);
             n = write(newsockfd, &response[0], response.length());
             if (n < 0)
             {
