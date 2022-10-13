@@ -135,9 +135,7 @@ void *connection_handler(void *args)
                 cout << "Request: " << buffer << endl;
                 request = string(buffer);
                 response = handle_request(request);
-                char char_array[response.length() + 1];
-                strcpy(char_array, response.c_str());
-                n = write(newsockfd, char_array, strlen(char_array));
+                n = write(newsockfd, response.c_str(), strlen(response.c_str()));
                 // cout << "Response: " << response << endl;
                 if (n < 0)
                 {
