@@ -1,10 +1,10 @@
 #include "http_server.hh"
 
 /**
- * @brief Split a string into a vector of strings
+ * @brief split a string into a vector of strings
  *
- * @param s Input String
- * @param delim Delimiter for splitting
+ * @param s input String
+ * @param delim delimiter for splitting
  * @return vector<string>
  */
 vector<string> split(const string &s, char delim)
@@ -24,22 +24,22 @@ vector<string> split(const string &s, char delim)
 }
 
 /**
- * @brief Construct a new HTTP_Request structure
+ * @brief construct a new HTTP_Request structure
  *
- * @param request Request string from the client socket
+ * @param request request string from the client socket
  */
 HTTP_Request::HTTP_Request(string request)
 {
-    vector<string> lines = split(request, '\n');      // Split the request into lines
-    vector<string> first_line = split(lines[0], ' '); // Split the first line into words
+    vector<string> lines = split(request, '\n');      // split the request into lines
+    vector<string> first_line = split(lines[0], ' '); // split the first line into words
 
-    this->HTTP_version = "1.0"; // We'll be using 1.0 irrespective of the request
+    this->HTTP_version = "1.0"; // using 1.0 irrespective of the request
 
-    // Extraction of the request method and URL from first_line
+    // extraction of the request method and URL from first_line
     this->method = first_line[0];
     this->url = first_line[1];
 
-    // Supports only GET requests
+    // supports only GET requests
     if (this->method != "GET")
     {
         cerr << "Method '" << this->method << "' not supported" << endl;
@@ -48,9 +48,9 @@ HTTP_Request::HTTP_Request(string request)
 }
 
 /**
- * @brief Parses a HTTP request and returns a HTTP_Response structure
+ * @brief parses a HTTP request and returns a HTTP_Response structure
  *
- * @param req Request string from the client socket
+ * @param req request string from the client socket
  * @return HTTP_Response*
  */
 string handle_request(string req)
@@ -70,13 +70,13 @@ string handle_request(string req)
         response->status_text = "OK";
         response->content_type = "text/html";
 
-        // If the requested path is a directory, open index.html
+        // if the requested path is a directory, open index.html
         if (S_ISDIR(sb.st_mode))
         {
             url += "/index.html";
         }
 
-        // Opening the file and reading its contents
+        // opening the file and reading its contents
         struct stat filestat;
         stat(url.c_str(), &filestat);
         response->content_length = to_string(filestat.st_size);
@@ -85,10 +85,6 @@ string handle_request(string req)
         read(fd, char_array, filestat.st_size);
         char_array[filestat.st_size] = '\0';
         response->body = string(char_array);
-
-        /*
-        TODO : set the remaining fields of response appropriately
-        */
     }
 
     else
@@ -117,7 +113,7 @@ string handle_request(string req)
 }
 
 /**
- * @brief Returns the string representation of the HTTP Response
+ * @brief returns the string representation of the HTTP Response
  *
  * @return string
  */
