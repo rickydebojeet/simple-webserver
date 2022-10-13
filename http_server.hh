@@ -4,10 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <sys/stat.h>
-#include <fstream>
 #include <sstream>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <netinet/in.h>
@@ -18,10 +16,16 @@
 #include <signal.h>
 #include <algorithm>
 #include <string>
+#include <queue>
+#include <atomic>
 
+// Configuration
 #define HEADER_MAX 8192
-#define THREAD_MAX 8
+#define THREAD_MAX 16
 #define PORT 8080
+#define QUEUE_MAX 32
+#define SHOW_HEADER 1
+#define SANITY_CHECK 0
 
 using namespace std;
 
