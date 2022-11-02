@@ -1,11 +1,11 @@
-CC = g++ -Wno-write-strings
+CC = g++ -Wno-write-strings -lpthread -g --no-warnings
 SERVER_FILE = simple_server.cpp
 HTTP_SERVER_FILE = http_server.cpp
 
 all: server
 
 server: $(SERVER_FILE) $(HTTP_SERVER_FILE)
-	$(CC) $(SERVER_FILE) $(HTTP_SERVER_FILE) -lpthread -g -o server
+	$(CC) $(SERVER_FILE) $(HTTP_SERVER_FILE) -o server
 
 clean:
 	rm -f server
