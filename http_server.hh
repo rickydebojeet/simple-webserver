@@ -24,7 +24,8 @@
 #define THREAD_MAX 16
 #define PORT 8080
 #define QUEUE_MAX 32
-#define SHOW_HEADER 1
+#define SHOW_HEADER 0
+#define SHOW_OUTPUT 0
 #define SANITY_CHECK 0
 
 using namespace std;

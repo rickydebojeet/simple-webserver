@@ -47,9 +47,10 @@ int main(int argc, char *argv[])
 
     listen(sockfd, 5);
     clilen = sizeof(cli_addr);
-    cout << "Server started!!" << endl;
-    cout << "Listening on port " << PORT << endl;
-    cout << "To stop the server, press Ctrl+C" << endl;
+    cout << "Server started!! "
+         << "pid: " << getpid() << endl
+         << "Listening on port " << PORT << endl
+         << "To stop the server, press Ctrl+C" << endl;
 
     // creating threads
     for (int i = 0; i < THREAD_MAX; i++)
@@ -81,7 +82,9 @@ int main(int argc, char *argv[])
             {
                 pthread_cond_wait(&queueCondFull, &queueMutex);
             }
+#if SANITY_CHECK
             cout << "Connection accepted!!" << endl;
+#endif
             client_queue.push(newsockfd);
             pthread_cond_signal(&queueCondEmpty);
             pthread_mutex_unlock(&queueMutex);
@@ -136,7 +139,9 @@ void *connection_handler(void *args)
         }
         else if (n == 0)
         {
+#if SANITY_CHECK
             cout << "Client disconnected!!" << endl;
+#endif
         }
         else
         {
@@ -158,7 +163,7 @@ void *connection_handler(void *args)
                 request = string(buffer);
                 response = handle_request(request);
 
-#if SANITY_CHECK
+#if SHOW_OUTPUT
                 cout << "Response: " << endl
                      << response << endl;
 #endif
@@ -172,7 +177,9 @@ void *connection_handler(void *args)
             }
         }
         close(newsockfd);
+#if SANITY_CHECK
         cout << "Client disconnected!!" << endl;
+#endif
     }
 
     return NULL;
