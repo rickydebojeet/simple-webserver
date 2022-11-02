@@ -85,6 +85,7 @@ string handle_request(string req)
         read(fd, char_array, filestat.st_size);
         char_array[filestat.st_size] = '\0';
         response->body = string(char_array);
+        close(fd);
     }
 
     else
@@ -102,6 +103,7 @@ string handle_request(string req)
         read(fd, char_array, filestat.st_size);
         char_array[filestat.st_size] = '\0';
         response->body = string(char_array);
+        close(fd);
     }
 
     string response_string = response->get_string();
