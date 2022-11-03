@@ -7,7 +7,7 @@ pthread_cond_t queueCondEmpty;
 
 // queue for the thread pool
 queue<int> client_queue;
-atomic<bool> running = true;
+atomic<bool> running = {true};
 
 struct sigaction act;
 
@@ -134,8 +134,10 @@ void *connection_handler(void *args)
         n = read(newsockfd, buffer, HEADER_MAX - 1);
         if (n < 0)
         {
+#if FAULT_EXIT
             cerr << "ERROR reading from socket" << endl;
             exit(EXIT_FAILURE);
+#endif
         }
         else if (n == 0)
         {
@@ -171,8 +173,10 @@ void *connection_handler(void *args)
                 n = write(newsockfd, response.c_str(), strlen(response.c_str()));
                 if (n < 0)
                 {
+#if FAULT_EXIT
                     cerr << "ERROR writing to socket" << endl;
                     exit(EXIT_FAILURE);
+#endif
                 }
             }
         }
