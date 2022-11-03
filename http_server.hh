@@ -27,6 +27,7 @@
 #define SHOW_HEADER 0
 #define SHOW_OUTPUT 0
 #define SANITY_CHECK 0
+#define FAULT_EXIT 0
 
 using namespace std;
 
