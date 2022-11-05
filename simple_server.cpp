@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     // bind the socket to the address
     bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
 
-    listen(sockfd, 5);
+    listen(sockfd, QUEUE_MAX);
     clilen = sizeof(cli_addr);
     cout << "Server started!! "
          << "pid: " << getpid() << endl

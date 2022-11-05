@@ -21,9 +21,9 @@
 
 // Configuration
 #define HEADER_MAX 8192
-#define THREAD_MAX 16
+#define THREAD_MAX 32
 #define PORT 8080
-#define QUEUE_MAX 32
+#define QUEUE_MAX 64
 #define SHOW_HEADER 0
 #define SHOW_OUTPUT 0
 #define SANITY_CHECK 0
