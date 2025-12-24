@@ -2,7 +2,7 @@
 
 A simple C++ based WebServer with Pool Threads and HTTP Processing.
 
-> The webserver supports only `HTTP/1.0` and basic `GET` requests.
+> The webserver supports only `HTTP/1.0` and basic `GET` requests. A more complete implementation is planned for the future.
 
 ## Usage
 
