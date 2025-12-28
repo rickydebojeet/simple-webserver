@@ -24,24 +24,127 @@ vector<string> split(const string& s, char delim) {
  * @brief construct a new HTTP_Request structure
  *
  * @param request request string from the client socket
+ * @return HTTP_Request* structure
  */
 HTTP_Request::HTTP_Request(string request) {
-    vector<string> lines =
-        split(request, '\n');  // split the request into lines
-    vector<string> first_line =
-        split(lines[0], ' ');  // split the first line into words
+    vector<string> lines = split(request, '\n');
+    if (lines.empty()) {
+        this->error_code = 400;
+        return;
+    }
 
-    this->HTTP_version = "1.0";  // using 1.0 irrespective of the request
+    vector<string> first_line = split(lines[0], ' ');
+    if (first_line.size() < 2) {
+        this->error_code = 400;
+        return;
+    }
+
+    if (first_line.size() == 3) {
+        string ver = first_line[2];
+        if (!ver.empty() && ver.back() == '\r') ver.pop_back();
+
+        if (ver.rfind("HTTP/", 0) == 0) {
+            this->HTTP_version = ver.substr(5);
+        } else {
+            this->error_code = 400;
+            return;
+        }
+    } else {
+        this->error_code = 400;
+        return;
+    }
 
     // extraction of the request method and URL from first_line
     this->method = first_line[0];
     this->url = first_line[1];
 
-    // supports only GET requests
-    if (this->method != "GET") {
-        cerr << "Method '" << this->method << "' not supported" << endl;
-        exit(1);
+    // Store headers
+    for (size_t i = 1; i < lines.size(); ++i) {
+        if (!lines[i].empty()) {
+            this->header_lines.push_back(lines[i]);
+            if (lines[i].find("Range:") != string::npos) {
+                this->range_header = lines[i];
+            }
+        }
     }
+
+    if (this->method != "GET") this->error_code = 405;  // Method Not Allowed
+}
+
+/**
+ * @brief construct a new HTTP_Response structure
+ *
+ * @return HTTP_Response* structure
+ */
+HTTP_Response::HTTP_Response() {
+    this->use_sendfile = false;
+    this->file_fd = -1;
+    this->offset = 0;
+    this->length = 0;
+}
+
+bool should_use_sendfile(const string& path) {
+    // Check specific directories
+    if (path.find("www/media/") == 0) return true;
+    if (path.find("www/static/") == 0) return true;
+
+    // Check extensions
+    size_t pos = path.find_last_of(".");
+    if (pos != string::npos) {
+        string ext = path.substr(pos);
+        if (ext == ".ts" || ext == ".mp4" || ext == ".m3u8" || ext == ".aac")
+            return true;
+    }
+    return false;
+}
+
+/**
+ * @brief create a simple HTTP error response
+ *
+ * @param code numeric HTTP status code (e.g., 400)
+ * @param version HTTP version string (e.g., "1.1")
+ * @return HTTP_Response* newly allocated response (caller owns)
+ */
+void make_error_response(HTTP_Response* r, int code, const string& version) {
+    if (!r) return;
+    r->HTTP_version = version.empty() ? string("1.0") : version;
+    r->content_type = "text/html";
+    switch (code) {
+        case 400:
+            r->status_code = "400";
+            r->status_text = "Bad Request";
+            break;
+        case 404:
+            r->status_code = "404";
+            r->status_text = "Not Found";
+            break;
+        case 405:
+            r->status_code = "405";
+            r->status_text = "Method Not Allowed";
+            break;
+        case 416:
+            r->status_code = "416";
+            r->status_text = "Range Not Satisfiable";
+            break;
+        case 500:
+            r->status_code = "500";
+            r->status_text = "Internal Server Error";
+            break;
+        case 505:
+            r->status_code = "505";
+            r->status_text = "HTTP Version Not Supported";
+            break;
+        default:
+            r->status_code = to_string(code);
+            r->status_text = "Error";
+            break;
+    }
+    string body =
+        "<html><body><h1>" + r->status_code + " " + r->status_text + "</h1>";
+    body += "</body></html>";
+    r->body = body;
+    r->content_length = to_string(r->body.length());
+    r->connection = "close";
 }
 
 /**
@@ -50,62 +153,170 @@ HTTP_Request::HTTP_Request(string request) {
  * @param req request string from the client socket
  * @return HTTP_Response*
  */
-string handle_request(string req) {
+HTTP_Response* handle_request(string req) {
     HTTP_Request* request = new HTTP_Request(req);
 
     HTTP_Response* response = new HTTP_Response();
 
-    string url = string("html_files") + request->url;
+    if (request->error_code != 0) {
+        make_error_response(response, request->error_code,
+                            request->HTTP_version);
+        delete request;
+        return response;
+    }
 
-    response->HTTP_version = "1.0";
+    string url = string("www") + request->url;
+
+    response->HTTP_version = request->HTTP_version;
+
+    bool host_found = false;
+    bool connection_close = false;
+
+    for (const string& line : request->header_lines) {
+        if (line.compare(0, 5, "Host:") == 0) {
+            host_found = true;
+        }
+        if (line.compare(0, 11, "Connection:") == 0) {
+            if (line.find("close") != string::npos) {
+                connection_close = true;
+            }
+        }
+    }
+
+    if (request->HTTP_version == "1.1" && !host_found) {
+        make_error_response(response, 400, request->HTTP_version);
+        delete request;
+        return response;
+    }
+
+    if (request->HTTP_version == "1.1") {
+        response->connection = connection_close ? "close" : "keep-alive";
+    } else {
+        response->connection = "close";
+    }
 
     struct stat sb;
     if (stat(url.c_str(), &sb) == 0)  // requested path exists
     {
-        response->status_code = "200";
-        response->status_text = "OK";
-        response->content_type = "text/html";
-
-        // if the requested path is a directory, open index.html
         if (S_ISDIR(sb.st_mode)) {
             url += "/index.html";
+            stat(url.c_str(), &sb);  // Stat the index file
         }
 
-        // opening the file and reading its contents
-        struct stat filestat;
-        stat(url.c_str(), &filestat);
-        response->content_length = to_string(filestat.st_size);
-        char char_array[filestat.st_size + 1];
-        int fd = open(url.c_str(), O_RDONLY);
-        read(fd, char_array, filestat.st_size);
-        char_array[filestat.st_size] = '\0';
-        response->body = string(char_array);
-        close(fd);
-    }
+#if USE_SENDFILE
+        // Only use sendfile if path matches criteria
+        if (should_use_sendfile(url)) {
+            response->file_fd = open(url.c_str(), O_RDONLY);
+            if (response->file_fd != -1) {
+                response->use_sendfile = true;
 
-    else {
+                // Range Support
+                off_t start = 0;
+                off_t end = sb.st_size - 1;
+                bool partial = false;
+
+                if (!request->range_header.empty()) {
+                    size_t eq_pos = request->range_header.find("=");
+                    if (eq_pos != string::npos) {
+                        string bytes_range =
+                            request->range_header.substr(eq_pos + 1);
+                        size_t dash_pos = bytes_range.find("-");
+                        if (dash_pos != string::npos) {
+                            string start_str = bytes_range.substr(0, dash_pos);
+                            string end_str = bytes_range.substr(dash_pos + 1);
+                            if (!start_str.empty()) start = stoll(start_str);
+                            if (!end_str.empty()) end = stoll(end_str);
+                            partial = true;
+                        }
+                    }
+                }
+
+                if (end >= sb.st_size) end = sb.st_size - 1;
+                if (start > end) {
+                    // 416 Range Not Satisfiable
+                    response->status_code = "416";
+                    response->status_text = "Range Not Satisfiable";
+                    partial = false;
+                } else {
+                    response->offset = start;
+                    response->length = end - start + 1;
+                    if (partial) {
+                        response->status_code = "206";
+                        response->status_text = "Partial Content";
+                        response->content_range = "bytes " + to_string(start) +
+                                                  "-" + to_string(end) + "/" +
+                                                  to_string(sb.st_size);
+                    } else {
+                        response->status_code = "200";
+                        response->status_text = "OK";
+                    }
+                }
+                response->content_length = to_string(response->length);
+            }
+        }
+#endif
+
+        // Fallback: If sendfile not used (or not enabled for this file), use
+        // standard read
+        if (!response->use_sendfile) {
+            response->status_code = "200";
+            response->status_text = "OK";
+            struct stat filestat;
+            stat(url.c_str(), &filestat);
+            response->content_length = to_string(filestat.st_size);
+            // Warning: Reading large files into memory here is bad, but this
+            // path is now for small non-media files
+            char* char_array = new char[filestat.st_size + 1];
+            int fd = open(url.c_str(), O_RDONLY);
+            read(fd, char_array, filestat.st_size);
+            char_array[filestat.st_size] = '\0';
+            response->body = string(char_array);
+            delete[] char_array;
+            close(fd);
+        }
+
+        // Content Type logic (shared)
+        // Determine content type
+        string extension = "";
+        size_t pos = url.find_last_of(".");
+        if (pos != string::npos) {
+            extension = url.substr(pos);
+        }
+
+        if (extension == ".css") {
+            response->content_type = "text/css";
+        } else if (extension == ".js") {
+            response->content_type = "text/javascript";
+        } else if (extension == ".jpg" || extension == ".jpeg") {
+            response->content_type = "image/jpeg";
+        } else if (extension == ".png") {
+            response->content_type = "image/png";
+        } else if (extension == ".svg") {
+            response->content_type = "image/svg+xml";
+        } else if (extension == ".ts") {
+            response->content_type = "video/mp2t";
+        } else if (extension == ".m3u8") {
+            response->content_type = "application/vnd.apple.mpegurl";
+        } else {
+            response->content_type = "text/html";
+        }
+
+    } else {
+        // 404 Not Found
         response->status_code = "404";
         response->status_text = "Not Found";
         response->content_type = "text/html";
-
-        string errorOutput = string("html_files/404.html");
-        struct stat filestat;
-        stat(errorOutput.c_str(), &filestat);
-        response->content_length = to_string(filestat.st_size);
-        char char_array[filestat.st_size + 1];
-        int fd = open(errorOutput.c_str(), O_RDONLY);
-        read(fd, char_array, filestat.st_size);
-        char_array[filestat.st_size] = '\0';
-        response->body = string(char_array);
-        close(fd);
+        response->body = "<html><body><h1>404 Not Found</h1></body></html>";
+        response->content_length = to_string(response->body.length());
     }
 
-    string response_string = response->get_string();
+    // NOTE: Logic for non-sendfile (legacy) buffering needed if USE_SENDFILE is
+    // off or file open failed For brevity in this diff, assuming SUCCESSFUL
+    // SENDFILE or 404. If USE_SENDFILE is 1, and Open succeeded, we are good.
+    // We need to handle directory case where index.html is used.
 
     delete request;
-    delete response;
-
-    return response_string;
+    return response;
 }
 
 /**
@@ -127,6 +338,12 @@ string HTTP_Response::get_string() {
     response += this->date + "\r\n";
     response += "Content-Type: " + this->content_type + "\r\n";
     response += "Content-Length: " + this->content_length + "\r\n";
+    if (!this->content_range.empty()) {
+        response += "Content-Range: " + this->content_range + "\r\n";
+    }
+    if (!this->connection.empty()) {
+        response += "Connection: " + this->connection + "\r\n";
+    }
     response += "\r\n";
     response += this->body;
 

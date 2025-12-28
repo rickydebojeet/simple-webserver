@@ -1,11 +1,20 @@
-CC = g++ -Wno-write-strings -lpthread -g --no-warnings
-SERVER_FILE = simple_server.cpp
-HTTP_SERVER_FILE = http_server.cpp
+CXX = g++
+CXXFLAGS = -std=c++17 -O3 -march=native -flto -Wall -Wextra -Wno-write-strings -pthread
+LDFLAGS = -flto -pthread
 
-all: server
+SRCS = simple_server.cpp http_server.cpp
+OBJS = $(SRCS:.cpp=.o)
+TARGET = server
 
-server: $(SERVER_FILE) $(HTTP_SERVER_FILE)
-	$(CC) $(SERVER_FILE) $(HTTP_SERVER_FILE) -o server
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $(OBJS)
+
+%.o: %.cpp http_server.hh
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f server
+	rm -f $(OBJS) $(TARGET)
+
+.PHONY: all clean

@@ -10,6 +10,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/sendfile.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -29,6 +32,7 @@
 #define SHOW_OUTPUT 0
 #define SANITY_CHECK 0
 #define FAULT_EXIT 0
+#define USE_SENDFILE 1
 
 using namespace std;
 
@@ -36,34 +40,45 @@ void* connection_handler(void* args);
 void int_handler(int);
 
 struct HTTP_Request {
-    string HTTP_version;
+    string HTTP_version;  // 1.0, 1.1
 
-    string method;
+    string method;  // GET
     string url;
 
-    // TODO : Add more fields if and when needed
+    int error_code;  // For storing any parsing errors
+
+    vector<string> header_lines;
+    string range_header;
 
     HTTP_Request(string request);  // Constructor
 };
 
 struct HTTP_Response {
-    string HTTP_version;  // 1.0 for this assignment
+    string HTTP_version;  // 1.0, 1.1
 
     string status_code;  // ex: 200, 404, etc.
     string status_text;  // ex: OK, Not Found, etc.
 
     string content_type;
     string content_length;
+    string content_range;
 
     string body;
 
-    // TODO : Add more fields if and when needed
     string date;
+    string connection;  // "keep-alive" or "close"
 
+    // Sendfile fields
+    bool use_sendfile;
+    int file_fd;
+    off_t offset;
+    size_t length;
+
+    HTTP_Response();  // Constructor
     string
     get_string();  // Returns the string representation of the HTTP Response
 };
 
-string handle_request(string request);  // Function to handle a request
+HTTP_Response* handle_request(string request);  // Function to handle a request
 
 #endif
