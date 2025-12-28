@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>HLS Stream Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+      video {
+        width: 100%;
+        max-width: 900px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>HLS Stream Test</h1>
+    <p>
+      Plays <code>/media/sample.m3u8</code> using
+      <a href="https://github.com/video-dev/hls.js/">hls.js</a> when needed.
+    </p>
+
+    <video id="player" controls></video>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+    <script>
+      const video = document.getElementById("player");
+      const url = "/media/sample.m3u8";
+
+      // Prefer hls.js when available (MSE), fall back to native only when
+      // the browser explicitly supports HLS natively (Safari).
+      if (window.Hls && Hls.isSupported()) {
+        const hlsConfig = {
+          // keep a small buffer to avoid fetching all segments at once
+          maxBufferLength: 30, // target buffer (seconds)
+          maxMaxBufferLength: 60, // absolute cap (seconds)
+          maxBufferSize: 60 * 1000 * 1000, // 60 MB
+          maxBufferHole: 0.5,
+          maxBackBufferLength: 30,
+        };
+        const hls = new Hls(hlsConfig);
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+          console.log("HLS manifest parsed, starting playback");
+          video.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, function (event, data) {
+          console.error("hls.js error", event, data);
+        });
+      } else if (
+        video.canPlayType("application/vnd.apple.mpegurl") === "probably"
+      ) {
+        // Only use native if the browser reports strong support
+        video.src = url;
+      } else {
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          "<p><strong>Error:</strong> hls.js not available and browser has no native HLS support.</p>"
+        );
+        console.error(
+          "No HLS support: Hls=",
+          !!window.Hls,
+          "canPlayType=",
+          video.canPlayType("application/vnd.apple.mpegurl")
+        );
+      }
+    </script>
+  </body>
+</html>

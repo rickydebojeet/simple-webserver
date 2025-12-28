@@ -224,9 +224,17 @@ HTTP_Response* handle_request(string req) {
                         if (dash_pos != string::npos) {
                             string start_str = bytes_range.substr(0, dash_pos);
                             string end_str = bytes_range.substr(dash_pos + 1);
-                            if (!start_str.empty()) start = stoll(start_str);
-                            if (!end_str.empty()) end = stoll(end_str);
-                            partial = true;
+                            bool parsed_ok = true;
+                            try {
+                                if (!start_str.empty())
+                                    start = stoll(start_str);
+                                if (!end_str.empty()) end = stoll(end_str);
+                            } catch (const std::invalid_argument&) {
+                                parsed_ok = false;
+                            } catch (const std::out_of_range&) {
+                                parsed_ok = false;
+                            }
+                            if (parsed_ok) partial = true;
                         }
                     }
                 }
@@ -338,6 +346,8 @@ string HTTP_Response::get_string() {
     response += this->date + "\r\n";
     response += "Content-Type: " + this->content_type + "\r\n";
     response += "Content-Length: " + this->content_length + "\r\n";
+    // Advertise byte-range support which HLS players often expect
+    response += "Accept-Ranges: bytes\r\n";
     if (!this->content_range.empty()) {
         response += "Content-Range: " + this->content_range + "\r\n";
     }
