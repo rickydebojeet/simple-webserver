@@ -84,17 +84,7 @@ HTTP_Response::HTTP_Response() {
 }
 
 bool should_use_sendfile(const string& path) {
-    // Check specific directories
     if (path.find("www/media/") == 0) return true;
-    if (path.find("www/static/") == 0) return true;
-
-    // Check extensions
-    size_t pos = path.find_last_of(".");
-    if (pos != string::npos) {
-        string ext = path.substr(pos);
-        if (ext == ".ts" || ext == ".mp4" || ext == ".m3u8" || ext == ".aac")
-            return true;
-    }
     return false;
 }
 
@@ -203,7 +193,6 @@ HTTP_Response* handle_request(string req) {
             stat(url.c_str(), &sb);  // Stat the index file
         }
 
-#if USE_SENDFILE
         // Only use sendfile if path matches criteria
         if (should_use_sendfile(url)) {
             response->file_fd = open(url.c_str(), O_RDONLY);
@@ -262,7 +251,6 @@ HTTP_Response* handle_request(string req) {
                 response->content_length = to_string(response->length);
             }
         }
-#endif
 
         // Fallback: If sendfile not used (or not enabled for this file), use
         // standard read
@@ -310,12 +298,7 @@ HTTP_Response* handle_request(string req) {
         }
 
     } else {
-        // 404 Not Found
-        response->status_code = "404";
-        response->status_text = "Not Found";
-        response->content_type = "text/html";
-        response->body = "<html><body><h1>404 Not Found</h1></body></html>";
-        response->content_length = to_string(response->body.length());
+        make_error_response(response, 404, request->HTTP_version);
     }
 
     // NOTE: Logic for non-sendfile (legacy) buffering needed if USE_SENDFILE is

@@ -7,18 +7,17 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/sendfile.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#ifdef __linux__
-#include <sys/sendfile.h>
-#endif
 
 #include <algorithm>
 #include <atomic>
 #include <ctime>
 #include <iostream>
 #include <queue>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -28,16 +27,12 @@
 #define THREAD_MAX 32
 #define PORT 8080
 #define QUEUE_MAX 64
-#define SHOW_HEADER 0
-#define SHOW_OUTPUT 0
-#define SANITY_CHECK 0
-#define FAULT_EXIT 0
-#define USE_SENDFILE 1
+#define SHOW_HEADER 1
+#define SHOW_OUTPUT 1
+#define SANITY_CHECK 1
+#define FAULT_EXIT 1
 
 using namespace std;
-
-void* connection_handler(void* args);
-void int_handler(int);
 
 struct HTTP_Request {
     string HTTP_version;  // 1.0, 1.1
