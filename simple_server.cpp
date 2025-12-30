@@ -75,11 +75,6 @@ void* connection_handler(void* args) {
             // read request from the socket
             n = read(newsockfd, buffer, HEADER_MAX - 1);
             if (n < 0) {
-#if FAULT_EXIT
-                cerr << newsockfd << " FD: " << "ERROR reading from socket"
-                     << endl;
-                exit(EXIT_FAILURE);
-#endif
                 break;
             } else if (n == 0) {
 #if SANITY_CHECK
@@ -153,6 +148,9 @@ void* connection_handler(void* args) {
                                 delete response;
                                 break;
                             }
+#if SANITY_CHECK
+                            cout << "Sent " << n << " bytes" << endl;
+#endif
                         }
                     }
 

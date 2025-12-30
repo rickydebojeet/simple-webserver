@@ -26,49 +26,52 @@ vector<string> split(const string& s, char delim) {
  * @param request request string from the client socket
  * @return HTTP_Request* structure
  */
-HTTP_Request::HTTP_Request(string request) {
+HTTP_Request::HTTP_Request(string request) : error_code(0) {
     vector<string> lines = split(request, '\n');
     if (lines.empty()) {
         this->error_code = 400;
         return;
     }
 
+    for (auto& line : lines) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+    }
+
+    if (lines[0].empty()) {
+        this->error_code = 400;
+        return;
+    }
     vector<string> first_line = split(lines[0], ' ');
-    if (first_line.size() < 2) {
+    if (first_line.size() < 3) {
         this->error_code = 400;
         return;
     }
 
-    if (first_line.size() == 3) {
-        string ver = first_line[2];
-        if (!ver.empty() && ver.back() == '\r') ver.pop_back();
+    this->method = first_line[0];
+    this->url = first_line[1];
+    string ver = first_line[2];
 
-        if (ver.rfind("HTTP/", 0) == 0) {
-            this->HTTP_version = ver.substr(5);
-        } else {
-            this->error_code = 400;
-            return;
-        }
+    if (ver.rfind("HTTP/", 0) == 0) {
+        this->HTTP_version = ver.substr(5);
     } else {
         this->error_code = 400;
         return;
     }
 
-    // extraction of the request method and URL from first_line
-    this->method = first_line[0];
-    this->url = first_line[1];
-
-    // Store headers
-    for (size_t i = 1; i < lines.size(); ++i) {
-        if (!lines[i].empty()) {
-            this->header_lines.push_back(lines[i]);
-            if (lines[i].find("Range:") != string::npos) {
-                this->range_header = lines[i];
-            }
-        }
+    if (this->method != "GET") {
+        this->error_code = 405;  // Method Not Allowed
+        return;
     }
 
-    if (this->method != "GET") this->error_code = 405;  // Method Not Allowed
+    for (size_t i = 1; i < lines.size(); ++i) {
+        this->header_lines.push_back(lines[i]);
+        if (lines[i].compare(0, 6, "Range:") == 0) {
+#if SANITY_CHECK
+            cout << "Found Range header: " << lines[i] << endl;
+#endif
+            this->range_header = lines[i];
+        }
+    }
 }
 
 /**
@@ -83,22 +86,30 @@ HTTP_Response::HTTP_Response() {
     this->length = 0;
 }
 
-bool should_use_sendfile(const string& path) {
-    if (path.find("www/media/") == 0) return true;
-    return false;
+// Helper: Content-Type map
+string get_content_type(const string& url) {
+    size_t pos = url.find_last_of(".");
+    if (pos == string::npos) return "text/html";
+
+    string ext = url.substr(pos);
+    if (ext == ".html") return "text/html";
+    if (ext == ".css") return "text/css";
+    if (ext == ".js") return "text/javascript";
+    if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+    if (ext == ".png") return "image/png";
+    if (ext == ".svg") return "image/svg+xml";
+    if (ext == ".ts") return "video/mp2t";
+    if (ext == ".m3u8") return "application/vnd.apple.mpegurl";
+    if (ext == ".mp4") return "video/mp4";
+    return "text/plain";
 }
 
-/**
- * @brief create a simple HTTP error response
- *
- * @param code numeric HTTP status code (e.g., 400)
- * @param version HTTP version string (e.g., "1.1")
- * @return HTTP_Response* newly allocated response (caller owns)
- */
 void make_error_response(HTTP_Response* r, int code, const string& version) {
     if (!r) return;
-    r->HTTP_version = version.empty() ? string("1.0") : version;
+    r->HTTP_version = version.empty() ? "1.0" : version;
     r->content_type = "text/html";
+    r->connection = "close";
+
     switch (code) {
         case 400:
             r->status_code = "400";
@@ -120,21 +131,54 @@ void make_error_response(HTTP_Response* r, int code, const string& version) {
             r->status_code = "500";
             r->status_text = "Internal Server Error";
             break;
-        case 505:
-            r->status_code = "505";
-            r->status_text = "HTTP Version Not Supported";
-            break;
         default:
             r->status_code = to_string(code);
             r->status_text = "Error";
             break;
     }
-    string body =
-        "<html><body><h1>" + r->status_code + " " + r->status_text + "</h1>";
-    body += "</body></html>";
-    r->body = body;
+
+    r->body = "<html><body><h1>" + r->status_code + " " + r->status_text +
+              "</h1></body></html>";
     r->content_length = to_string(r->body.length());
-    r->connection = "close";
+}
+
+FILE_range parse_range_header(const string& header, off_t file_size) {
+    if (header.empty()) return {0, 0, false};
+
+    size_t eq_pos = header.find("=");
+    if (eq_pos == string::npos) return {0, 0, false};
+
+    string bytes_range = header.substr(eq_pos + 1);
+    size_t dash_pos = bytes_range.find("-");
+    if (dash_pos == string::npos) return {0, 0, false};
+
+    string start_str = bytes_range.substr(0, dash_pos);
+    string end_str = bytes_range.substr(dash_pos + 1);
+
+    off_t start = 0;
+    off_t end = file_size - 1;
+
+    try {
+        if (!start_str.empty()) start = stoll(start_str);
+        if (!end_str.empty())
+            end = stoll(end_str);
+        else
+            end = file_size - 1;
+    } catch (...) {
+        return {0, 0, false};
+    }
+
+    if (start_str.empty() && !end_str.empty()) {
+        start = file_size - end;
+        end = file_size - 1;
+    }
+
+    if (start < 0) start = 0;
+    if (end >= file_size) end = file_size - 1;
+
+    if (start > end) return {0, 0, false};
+
+    return {start, end, true};
 }
 
 /**
@@ -144,9 +188,9 @@ void make_error_response(HTTP_Response* r, int code, const string& version) {
  * @return HTTP_Response*
  */
 HTTP_Response* handle_request(string req) {
-    HTTP_Request* request = new HTTP_Request(req);
-
-    HTTP_Response* response = new HTTP_Response();
+    auto* request = new HTTP_Request(req);
+    auto* response = new HTTP_Response();
+    response->HTTP_version = request->HTTP_version;
 
     if (request->error_code != 0) {
         make_error_response(response, request->error_code,
@@ -155,21 +199,13 @@ HTTP_Response* handle_request(string req) {
         return response;
     }
 
-    string url = string("www") + request->url;
-
-    response->HTTP_version = request->HTTP_version;
-
-    bool host_found = false;
     bool connection_close = false;
-
-    for (const string& line : request->header_lines) {
-        if (line.compare(0, 5, "Host:") == 0) {
-            host_found = true;
-        }
-        if (line.compare(0, 11, "Connection:") == 0) {
-            if (line.find("close") != string::npos) {
-                connection_close = true;
-            }
+    bool host_found = false;
+    for (const auto& line : request->header_lines) {
+        if (line.compare(0, 5, "Host:") == 0) host_found = true;
+        if (line.compare(0, 11, "Connection:") == 0 &&
+            line.find("close") != string::npos) {
+            connection_close = true;
         }
     }
 
@@ -179,166 +215,106 @@ HTTP_Response* handle_request(string req) {
         return response;
     }
 
-    if (request->HTTP_version == "1.1") {
-        response->connection = connection_close ? "close" : "keep-alive";
-    } else {
-        response->connection = "close";
+    response->connection = (connection_close || request->HTTP_version != "1.1")
+                               ? "close"
+                               : "keep-alive";
+
+    string file_path = "www" + request->url;
+    struct stat sb;
+
+    if (stat(file_path.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
+        file_path += "/index.html";
+        if (stat(file_path.c_str(), &sb) != 0) {
+            make_error_response(response, 404, request->HTTP_version);
+            delete request;
+            return response;
+        }
+    } else if (stat(file_path.c_str(), &sb) != 0) {
+        make_error_response(response, 404, request->HTTP_version);
+        delete request;
+        return response;
     }
 
-    struct stat sb;
-    if (stat(url.c_str(), &sb) == 0)  // requested path exists
-    {
-        if (S_ISDIR(sb.st_mode)) {
-            url += "/index.html";
-            stat(url.c_str(), &sb);  // Stat the index file
+    response->content_type = get_content_type(file_path);
+
+    FILE_range range = {0, sb.st_size - 1, false};
+    bool partial = false;
+    if (!request->range_header.empty()) {
+        FILE_range parsed =
+            parse_range_header(request->range_header, sb.st_size);
+        if (parsed.valid) {
+            range = parsed;
+            partial = true;
+        } else if (request->range_header.find("bytes=") != string::npos) {
+            make_error_response(response, 416, request->HTTP_version);
+            delete request;
+            return response;
         }
+    }
 
-        // Only use sendfile if path matches criteria
-        if (should_use_sendfile(url)) {
-            response->file_fd = open(url.c_str(), O_RDONLY);
-            if (response->file_fd != -1) {
-                response->use_sendfile = true;
+    if (partial) {
+        response->status_code = "206";
+        response->status_text = "Partial Content";
+        response->content_range = "bytes " + to_string(range.start) + "-" +
+                                  to_string(range.end) + "/" +
+                                  to_string(sb.st_size);
+    } else {
+        response->status_code = "200";
+        response->status_text = "OK";
+    }
 
-                // Range Support
-                off_t start = 0;
-                off_t end = sb.st_size - 1;
-                bool partial = false;
+    response->offset = range.start;
+    response->length = range.end - range.start + 1;
+    response->content_length = to_string(response->length);
 
-                if (!request->range_header.empty()) {
-                    size_t eq_pos = request->range_header.find("=");
-                    if (eq_pos != string::npos) {
-                        string bytes_range =
-                            request->range_header.substr(eq_pos + 1);
-                        size_t dash_pos = bytes_range.find("-");
-                        if (dash_pos != string::npos) {
-                            string start_str = bytes_range.substr(0, dash_pos);
-                            string end_str = bytes_range.substr(dash_pos + 1);
-                            bool parsed_ok = true;
-                            try {
-                                if (!start_str.empty())
-                                    start = stoll(start_str);
-                                if (!end_str.empty()) end = stoll(end_str);
-                            } catch (const std::invalid_argument&) {
-                                parsed_ok = false;
-                            } catch (const std::out_of_range&) {
-                                parsed_ok = false;
-                            }
-                            if (parsed_ok) partial = true;
-                        }
-                    }
-                }
+#if USE_SENDFILE
+    int fd = open(file_path.c_str(), O_RDONLY);
+    if (fd != -1) {
+        response->file_fd = fd;
+        response->use_sendfile = true;
+        delete request;
+        return response;
+    }
+#endif
 
-                if (end >= sb.st_size) end = sb.st_size - 1;
-                if (start > end) {
-                    // 416 Range Not Satisfiable
-                    response->status_code = "416";
-                    response->status_text = "Range Not Satisfiable";
-                    partial = false;
-                } else {
-                    response->offset = start;
-                    response->length = end - start + 1;
-                    if (partial) {
-                        response->status_code = "206";
-                        response->status_text = "Partial Content";
-                        response->content_range = "bytes " + to_string(start) +
-                                                  "-" + to_string(end) + "/" +
-                                                  to_string(sb.st_size);
-                    } else {
-                        response->status_code = "200";
-                        response->status_text = "OK";
-                    }
-                }
-                response->content_length = to_string(response->length);
+    int file_fd = open(file_path.c_str(), O_RDONLY);
+    if (file_fd != -1) {
+        if (lseek(file_fd, range.start, SEEK_SET) != -1) {
+            response->body.resize(response->length);
+            ssize_t bytes_read =
+                read(file_fd, &response->body[0], response->length);
+            if (bytes_read >= 0 && (size_t)bytes_read != response->length) {
+                response->body.resize(bytes_read);
+            } else if (bytes_read < 0) {
+                response->body.clear();
             }
         }
-
-        // Fallback: If sendfile not used (or not enabled for this file), use
-        // standard read
-        if (!response->use_sendfile) {
-            response->status_code = "200";
-            response->status_text = "OK";
-            struct stat filestat;
-            stat(url.c_str(), &filestat);
-            response->content_length = to_string(filestat.st_size);
-            // Warning: Reading large files into memory here is bad, but this
-            // path is now for small non-media files
-            char* char_array = new char[filestat.st_size + 1];
-            int fd = open(url.c_str(), O_RDONLY);
-            read(fd, char_array, filestat.st_size);
-            char_array[filestat.st_size] = '\0';
-            response->body = string(char_array);
-            delete[] char_array;
-            close(fd);
-        }
-
-        // Content Type logic (shared)
-        // Determine content type
-        string extension = "";
-        size_t pos = url.find_last_of(".");
-        if (pos != string::npos) {
-            extension = url.substr(pos);
-        }
-
-        if (extension == ".css") {
-            response->content_type = "text/css";
-        } else if (extension == ".js") {
-            response->content_type = "text/javascript";
-        } else if (extension == ".jpg" || extension == ".jpeg") {
-            response->content_type = "image/jpeg";
-        } else if (extension == ".png") {
-            response->content_type = "image/png";
-        } else if (extension == ".svg") {
-            response->content_type = "image/svg+xml";
-        } else if (extension == ".ts") {
-            response->content_type = "video/mp2t";
-        } else if (extension == ".m3u8") {
-            response->content_type = "application/vnd.apple.mpegurl";
-        } else {
-            response->content_type = "text/html";
-        }
-
-    } else {
-        make_error_response(response, 404, request->HTTP_version);
+        close(file_fd);
     }
-
-    // NOTE: Logic for non-sendfile (legacy) buffering needed if USE_SENDFILE is
-    // off or file open failed For brevity in this diff, assuming SUCCESSFUL
-    // SENDFILE or 404. If USE_SENDFILE is 1, and Open succeeded, we are good.
-    // We need to handle directory case where index.html is used.
 
     delete request;
     return response;
 }
 
-/**
- * @brief returns the string representation of the HTTP Response
- *
- * @return string
- */
 string HTTP_Response::get_string() {
-    string response = "";
-    time_t ltime;
-    ltime = time(0);
-    string str_time = asctime(gmtime(&ltime));
-    str_time.erase(remove(str_time.begin(), str_time.end(), '\n'),
-                   str_time.cend());
-    this->date = "Date: " + str_time + " GMT";
+    time_t now = time(0);
+    string str_time = asctime(gmtime(&now));
+    if (!str_time.empty() && str_time.back() == '\n') str_time.pop_back();
 
-    response += "HTTP/" + this->HTTP_version + " " + this->status_code + " " +
-                this->status_text + "\r\n";
-    response += this->date + "\r\n";
-    response += "Content-Type: " + this->content_type + "\r\n";
-    response += "Content-Length: " + this->content_length + "\r\n";
-    // Advertise byte-range support which HLS players often expect
-    response += "Accept-Ranges: bytes\r\n";
-    if (!this->content_range.empty()) {
-        response += "Content-Range: " + this->content_range + "\r\n";
-    }
-    if (!this->connection.empty()) {
-        response += "Connection: " + this->connection + "\r\n";
-    }
-    response += "\r\n";
-    response += this->body;
+    string response_str;
+    response_str.reserve(512);
 
-    return response;
+    response_str += "HTTP/" + this->HTTP_version + " " + this->status_code +
+                    " " + this->status_text + "\r\n";
+    response_str += "Date: " + str_time + " GMT\r\n";
+    response_str += "Content-Type: " + this->content_type + "\r\n";
+    response_str += "Content-Length: " + this->content_length + "\r\n";
+    response_str += "Accept-Ranges: bytes\r\n";
+    if (!this->content_range.empty())
+        response_str += "Content-Range: " + this->content_range + "\r\n";
+    if (!this->connection.empty())
+        response_str += "Connection: " + this->connection + "\r\n";
+    response_str += "\r\n";
+
+    return response_str;
 }

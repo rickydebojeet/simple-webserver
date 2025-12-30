@@ -32,6 +32,8 @@
 #define SANITY_CHECK 1
 #define FAULT_EXIT 1
 
+#define USE_SENDFILE 0
+
 using namespace std;
 
 struct HTTP_Request {
@@ -72,6 +74,12 @@ struct HTTP_Response {
     HTTP_Response();  // Constructor
     string
     get_string();  // Returns the string representation of the HTTP Response
+};
+
+struct FILE_range {
+    off_t start;
+    off_t end;
+    bool valid;
 };
 
 HTTP_Response* handle_request(string request);  // Function to handle a request
