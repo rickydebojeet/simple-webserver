@@ -298,8 +298,11 @@ HTTP_Response* handle_request(string req) {
 
 string HTTP_Response::get_string() {
     time_t now = time(0);
-    string str_time = asctime(gmtime(&now));
-    if (!str_time.empty() && str_time.back() == '\n') str_time.pop_back();
+    struct tm tm;
+    gmtime_r(&now, &tm);
+    char buf[128];
+    strftime(buf, sizeof(buf), "%a %b %d %H:%M:%S %Y", &tm);
+    string str_time = buf;
 
     string response_str;
     response_str.reserve(512);

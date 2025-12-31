@@ -3,6 +3,7 @@
 
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -27,10 +28,10 @@
 #define THREAD_MAX 32
 #define PORT 8080
 #define QUEUE_MAX 64
-#define SHOW_HEADER 1
-#define SHOW_OUTPUT 1
-#define SANITY_CHECK 1
-#define FAULT_EXIT 1
+#define SHOW_HEADER 0
+#define SHOW_OUTPUT 0
+#define SANITY_CHECK 0
+#define FAULT_EXIT 0
 
 #define USE_SENDFILE 0
 

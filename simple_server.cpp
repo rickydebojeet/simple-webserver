@@ -66,6 +66,12 @@ void* connection_handler(void* args) {
             // in error case, continue without timeout
         }
 
+        int flag = 1;
+        if (setsockopt(newsockfd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag,
+                       sizeof(int))) {
+            perror("setsockopt");
+        }
+
         while (true) {
             int n;
             string request;
@@ -107,6 +113,12 @@ void* connection_handler(void* args) {
 #if SHOW_OUTPUT
                     cout << "Response Header: " << endl << headers << endl;
 #endif
+
+                    // Enable TCP_CORK for packet coalescing
+                    int cork_flag = 1;
+                    setsockopt(newsockfd, IPPROTO_TCP, TCP_CORK, &cork_flag,
+                               sizeof(cork_flag));
+
                     n = write(newsockfd, headers.c_str(), headers.length());
                     if (n < 0) {
 #if FAULT_EXIT
@@ -153,6 +165,11 @@ void* connection_handler(void* args) {
 #endif
                         }
                     }
+
+                    // Disable TCP_CORK to flush the data
+                    cork_flag = 0;
+                    setsockopt(newsockfd, IPPROTO_TCP, TCP_CORK, &cork_flag,
+                               sizeof(cork_flag));
 
                     // Check if connection should be closed
                     if (response->connection == "close") {
