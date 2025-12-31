@@ -267,18 +267,24 @@ HTTP_Response* handle_request(string req) {
     response->length = range.end - range.start + 1;
     response->content_length = to_string(response->length);
 
-#if USE_SENDFILE
-    int fd = open(file_path.c_str(), O_RDONLY);
-    if (fd != -1) {
-        response->file_fd = fd;
-        response->use_sendfile = true;
-        delete request;
-        return response;
+    if (use_sendfile_api) {
+        int fd = open(file_path.c_str(), O_RDONLY);
+        if (fd != -1) {
+            if (!use_page_cache) {
+                posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+            }
+            response->file_fd = fd;
+            response->use_sendfile = true;
+            delete request;
+            return response;
+        }
     }
-#endif
 
     int file_fd = open(file_path.c_str(), O_RDONLY);
     if (file_fd != -1) {
+        if (!use_page_cache) {
+            posix_fadvise(file_fd, 0, 0, POSIX_FADV_DONTNEED);
+        }
         if (lseek(file_fd, range.start, SEEK_SET) != -1) {
             response->body.resize(response->length);
             ssize_t bytes_read =

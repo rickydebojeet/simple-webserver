@@ -1,5 +1,8 @@
 #include "http_server.hh"
 
+bool use_page_cache = true;
+bool use_sendfile_api = false;
+
 // for the thread pool
 pthread_mutex_t queueMutex;
 pthread_cond_t queueCondFull;
@@ -9,6 +12,7 @@ queue<int> client_queue;
 // for tracking active sockets
 pthread_mutex_t activeMutex;
 set<int> active_fds;
+int listen_fd = -1;
 
 atomic<bool> running = {true};
 
@@ -27,11 +31,7 @@ static void remove_active_fd(int fd) {
 void int_handler(int p) {
     (void)p;  // unused parameter
     running = false;
-    cout << "\nThe server is shutting down!!" << endl;
-    pthread_cond_broadcast(&queueCondEmpty);
-    pthread_mutex_lock(&activeMutex);
-    for (int fd : active_fds) shutdown(fd, SHUT_RDWR);
-    pthread_mutex_unlock(&activeMutex);
+    if (listen_fd != -1) close(listen_fd);
 }
 
 void* connection_handler(void* args) {
@@ -192,24 +192,51 @@ void* connection_handler(void* args) {
     return NULL;
 }
 
+void print_usage(const char* prog_name) {
+    cout << "Usage: " << prog_name << " [port] [options]" << endl;
+    cout << endl;
+    cout << "Port number (1-65535), default: " << PORT << endl;
+    cout << "Options:" << endl;
+    cout << "  --disable-page-cache\tDisable page cache using posix_fadvise)"
+         << endl;
+    cout << "  --use-sendfile\tEnable sendfile() API" << endl;
+    cout << "  -h, --help\t\tShow this help message" << endl;
+}
+
 int main(int argc, char* argv[]) {
-    if (argc == 1) {
-        cout << "Starting server with default port " << PORT << endl;
-    } else if (argc == 2) {
-        int port = atoi(argv[1]);
-        if (port <= 0 || port > 65535) {
-            cerr << "Invalid port number. Please provide a port between 1 and "
-                    "65535."
-                 << endl;
-            exit(EXIT_FAILURE);
+    int port = PORT;
+
+    for (int i = 1; i < argc; ++i) {
+        string arg = argv[i];
+        if (arg == "--disable-page-cache") {
+            use_page_cache = false;
+        } else if (arg == "--use-sendfile") {
+            use_sendfile_api = true;
+        } else if (arg == "-h" || arg == "--help") {
+            print_usage(argv[0]);
+            exit(EXIT_SUCCESS);
+        } else {
+            try {
+                port = stoi(arg);
+            } catch (...) {
+                cerr << "Unknown argument: " << arg << endl;
+                print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+            }
         }
-        cout << "Starting server with port " << port << endl;
-    } else {
-        cerr << "Usage: " << argv[0] << " [port]" << endl;
-        exit(EXIT_FAILURE);
     }
 
-    int sockfd;  // file descriptor for the listen socket
+    if (port <= 0 || port > 65535) {
+        cerr
+            << "Invalid port number. Please provide a port between 1 and 65535."
+            << endl;
+        print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    cout << "Starting server with port " << port << endl;
+    if (!use_page_cache) cout << "Page cache disabled" << endl;
+    if (use_sendfile_api) cout << "Using sendfile() API" << endl;
+
     pthread_t thread_id[THREAD_MAX];
 
     socklen_t clilen;
@@ -220,6 +247,7 @@ int main(int argc, char* argv[]) {
     act.sa_flags = 0;
     act.sa_handler = int_handler;
     sigaction(SIGINT, &act, NULL);
+    signal(SIGPIPE, SIG_IGN);
 
     // initialize mutex and condition variables
     pthread_mutex_init(&queueMutex, NULL);
@@ -228,14 +256,14 @@ int main(int argc, char* argv[]) {
     pthread_mutex_init(&activeMutex, NULL);
 
     // create a socket
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
+    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_fd < 0) {
         cerr << "ERROR opening socket" << endl;
         exit(EXIT_FAILURE);
     }
 
     int opt = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
@@ -247,12 +275,12 @@ int main(int argc, char* argv[]) {
     serv_addr.sin_port = htons(PORT);
 
     // bind the socket to the address
-    if (bind(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (bind(listen_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
 
-    listen(sockfd, QUEUE_MAX);
+    listen(listen_fd, QUEUE_MAX);
     clilen = sizeof(cli_addr);
     cout << "Server started!! "
          << "pid: " << getpid() << endl
@@ -270,7 +298,7 @@ int main(int argc, char* argv[]) {
 
     do {
         // accept a connection
-        int newsockfd = accept(sockfd, (struct sockaddr*)&cli_addr, &clilen);
+        int newsockfd = accept(listen_fd, (struct sockaddr*)&cli_addr, &clilen);
         if (!running) {
             break;
         } else if (newsockfd < 0) {
@@ -287,6 +315,12 @@ int main(int argc, char* argv[]) {
         }
     } while (running);
 
+    // Wake workers and shutdown active connections
+    pthread_mutex_lock(&queueMutex);
+    pthread_cond_broadcast(&queueCondEmpty);
+    for (int fd : active_fds) shutdown(fd, SHUT_RDWR);
+    pthread_mutex_unlock(&queueMutex);
+
     for (int j = 0; j < THREAD_MAX; j++) {
         pthread_join(thread_id[j], NULL);
     }
@@ -296,7 +330,7 @@ int main(int argc, char* argv[]) {
     pthread_cond_destroy(&queueCondEmpty);
     pthread_mutex_destroy(&activeMutex);
 
-    close(sockfd);
+    if (listen_fd != -1) close(listen_fd);
 
     cout << "Server stopped!!" << endl;
 

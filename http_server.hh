@@ -25,15 +25,16 @@
 
 // Configuration
 #define HEADER_MAX 8192
-#define THREAD_MAX 32
+#define THREAD_MAX 128
 #define PORT 8080
-#define QUEUE_MAX 64
+#define QUEUE_MAX 256
 #define SHOW_HEADER 0
 #define SHOW_OUTPUT 0
 #define SANITY_CHECK 0
 #define FAULT_EXIT 0
 
-#define USE_SENDFILE 0
+extern bool use_page_cache;
+extern bool use_sendfile_api;
 
 using namespace std;
 
