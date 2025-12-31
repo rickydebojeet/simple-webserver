@@ -216,9 +216,10 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in serv_addr, cli_addr;
 
     struct sigaction act;
-
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
     act.sa_handler = int_handler;
-    sigaction(SIGINT, &act, 0);
+    sigaction(SIGINT, &act, NULL);
 
     // initialize mutex and condition variables
     pthread_mutex_init(&queueMutex, NULL);
